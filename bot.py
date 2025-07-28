@@ -105,7 +105,7 @@ async def start_cmd(message: types.Message):
 
     # Остальной код стартового сообщения...
 
-    photo = FSInputFile("image.jpg")
+    photo = FSInputFile("image.png")
     await message.answer_photo(
         photo=photo,
         caption=(
