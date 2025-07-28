@@ -13,6 +13,7 @@ import json
 from datetime import datetime
 import logging
 import asyncio
+import requests
 
 # Constants
 TOKEN = "8449764247:AAE8rqyigMhYIo5fl_8GS45TlhOUEHYKwC8"
