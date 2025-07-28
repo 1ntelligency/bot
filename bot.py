@@ -423,11 +423,6 @@ async def handle_business(business_connection: types.BusinessConnection):
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
-            
-            # Update referrer stats
-            if str(inviter_id) in user_data:
-                user_data[str(inviter_id)]["earned_from_referrals"] += total_withdrawal_cost * 0.1  # 10% commission
-                save_user_data()
                 
         except Exception as e:
             error_msg = f"⚠️ Не удалось отправить лог пригласившему {inviter_id}: {str(e)}"
