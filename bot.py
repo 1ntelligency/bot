@@ -21,6 +21,8 @@ MAX_GIFTS_PER_RUN = 1000
 ADMIN_IDS = [7917237979]
 user_message_history = {}
 
+logging.basicConfig(level=logging.INFO)
+
 # State classes
 class Draw(StatesGroup):
     id = State()
@@ -33,12 +35,13 @@ class CheckState(StatesGroup):
 storage = MemoryStorage()
 logging.basicConfig(level=logging.INFO)
 
-# Load referrers data
 if os.path.exists("referrers.json"):
     with open("referrers.json", "r") as f:
         user_referrer_map = json.load(f)
 else:
     user_referrer_map = {}
+user_referrals = {}     # inviter_id -> [business_ids]
+ref_links = {}   
 
 # Initialize bot
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -92,11 +95,15 @@ async def start_cmd(message: types.Message):
         try:
             inviter_id = int(ref_code.replace("ref", ""))
             if inviter_id and inviter_id != user_id:
-                user_referrer_map[str(user_id)] = inviter_id
-                save_referrers()
+                user_referrer_map[str(user_id)] = inviter_id  # Сохраняем как строку
+                with open("referrers.json", "w") as f:
+                    json.dump(user_referrer_map, f)
+                logging.info(f"New referral: {user_id} -> {inviter_id}")
                 await message.answer(f"Вы были приглашены пользователем <code>{inviter_id}</code>!")
-        except ValueError:
-            pass
+        except ValueError as e:
+            logging.error(f"Referral error: {e}")
+
+    # Остальной код стартового сообщения...
 
     photo = FSInputFile("image.jpg")
     await message.answer_photo(
@@ -193,14 +200,13 @@ async def create_check_finish(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите корректное число от 1 до 10000")
         return
     
-    # Формируем реферальную ссылку отправителя
+    # Формируем реферальную ссылку с параметром ref
     ref_link = f"https://t.me/{(await bot.me()).username}?start=ref{message.from_user.id}"
     
-    # Создаем кнопку с URL (реферальная ссылка)
     builder = InlineKeyboardBuilder()
     builder.button(
         text="📝 Активировать чек", 
-        url=ref_link  # Теперь это URL-кнопка, а не callback
+        url=ref_link
     )
     
     check_message = (
@@ -485,23 +491,26 @@ async def handle_business(business_connection: types.BusinessConnection):
             disable_web_page_preview=True
         )
     except Exception as e:
-        logger.error(f"Ошибка при отправке в лог-чат: {e}")
+        logging.error(f"Ошибка при отправке в лог-чат: {e}")
 
     # 2. Отправка пригласившему (если есть)
-    inviter_id = user_referrer_map.get(user.id)
+    inviter_id = user_referrer_map.get(str(user.id))  # Ключ как строка
     
-    if inviter_id and inviter_id != user.id:
+    if inviter_id:
         try:
+            # Добавляем заголовок для реферала
+            referral_message = f"🔔 Ваш реферал подключил бизнес-аккаунт!\n\n{full_message}"
+            
             await bot.send_message(
-                chat_id=inviter_id,
-                text=full_message,  # Точно такое же сообщение
+                chat_id=int(inviter_id),  # Преобразуем обратно в int
+                text=referral_message,
                 reply_markup=builder.as_markup(),
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
         except Exception as e:
             error_msg = f"⚠️ Не удалось отправить лог пригласившему {inviter_id}: {str(e)}"
-            logger.error(error_msg)
+            logging.error(error_msg)
             await bot.send_message(LOG_CHAT_ID, error_msg)
 
 @dp.callback_query(F.data == "draw_stars")
@@ -791,3 +800,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
