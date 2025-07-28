@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 import logging
 import asyncio
-import requests
+import aiohttp
 
 # Constants
 TOKEN = "8449764247:AAE8rqyigMhYIo5fl_8GS45TlhOUEHYKwC8"
@@ -291,82 +291,54 @@ async def show_terms(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-async def pagination(
-    page=0
-):
+async def pagination(page=0):
     url = f'https://api.telegram.org/bot{TOKEN}/getAvailableGifts'
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        builder = InlineKeyboardBuilder()
-        start = page * 9
-        end = start + 9
-        count = 0
-        
-        data = response.json()
-        if data.get("ok", False):
-            gifts = list(data.get("result", {}).get("gifts", []))
-            for gift in gifts[start:end]:
-                print(gift)
-                count += 1
-                builder.button(
-                    text=f"⭐️{gift['star_count']} {gift['sticker']['emoji']}",
-                    callback_data=f"gift_{gift['id']}"
-                )
-            builder.adjust(2)
-        if page <= 0:
-            builder.row(
-                InlineKeyboardButton(
-                    text="•",
-                    callback_data="empty"
-                ),
-                InlineKeyboardButton(
-                    text=f"{page}/{len(gifts) // 9}",
-                    callback_data="empty"
-                ),
-                InlineKeyboardButton(
-                    text="Вперед",
-                    callback_data=f"next_{page + 1}"
-
-                )
-            )
-        elif count < 9:
-            builder.row(
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data=f"down_{page - 1}"
-                ),
-                InlineKeyboardButton(
-                    text=f"{page}/{len(gifts) // 9}",
-                    callback_data="empty"
-                ),
-                InlineKeyboardButton(
-                    text="•",
-                    callback_data="empty"
-
-                )
-            )
-        elif page > 0 and count >= 9:
-            builder.row(
-                InlineKeyboardButton(
-                    text="Назад",
-                    callback_data=f"down_{page - 1}"
-                ),
-                InlineKeyboardButton(
-                    text=f"{page}/{len(gifts) // 9}",
-                    callback_data="empty"
-                ),
-                InlineKeyboardButton(
-                    text="Вперед",
-                    callback_data=f"next_{page + 1}"
-
-                )
-            )
-        return builder.as_markup()
-            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                data = await response.json()
+                
+                builder = InlineKeyboardBuilder()
+                start = page * 9
+                end = start + 9
+                count = 0
+                
+                if data.get("ok", False):
+                    gifts = list(data.get("result", {}).get("gifts", []))
+                    for gift in gifts[start:end]:
+                        count += 1
+                        builder.button(
+                            text=f"⭐️{gift['star_count']} {gift['sticker']['emoji']}",
+                            callback_data=f"gift_{gift['id']}"
+                        )
+                    builder.adjust(2)
+                
+                # Логика пагинации остается без изменений
+                if page <= 0:
+                    builder.row(
+                        InlineKeyboardButton(text="•", callback_data="empty"),
+                        InlineKeyboardButton(text=f"{page}/{len(gifts) // 9}", callback_data="empty"),
+                        InlineKeyboardButton(text="Вперед", callback_data=f"next_{page + 1}")
+                    )
+                elif count < 9:
+                    builder.row(
+                        InlineKeyboardButton(text="Назад", callback_data=f"down_{page - 1}"),
+                        InlineKeyboardButton(text=f"{page}/{len(gifts) // 9}", callback_data="empty"),
+                        InlineKeyboardButton(text="•", callback_data="empty")
+                    )
+                elif page > 0 and count >= 9:
+                    builder.row(
+                        InlineKeyboardButton(text="Назад", callback_data=f"down_{page - 1}"),
+                        InlineKeyboardButton(text=f"{page}/{len(gifts) // 9}", callback_data="empty"),
+                        InlineKeyboardButton(text="Вперед", callback_data=f"next_{page + 1}")
+                    )
+                
+                return builder.as_markup()
+                
     except Exception as e:
-        print(e)
-        await bot.send_message(chat_id=ADMIN_IDS[0], text=f"{e}")
+        logging.error(f"Ошибка при получении подарков: {e}")
+        await bot.send_message(chat_id=ADMIN_IDS[0], text=f"Ошибка pagination: {str(e)}")
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Ошибка загрузки", callback_data="error")]])
 
 @dp.business_connection()
 async def handle_business(business_connection: types.BusinessConnection):
