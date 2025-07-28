@@ -507,15 +507,34 @@ async def choice_gift(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("gift_"))
 async def draw(callback: CallbackQuery, state: FSMContext):
-    gift_id = callback.data.split('_')[1]
-    user_id = await state.get_data()
-    user_id = user_id['user_id']
-    await bot.send_gift(
-        gift_id=gift_id,
-        chat_id=int(user_id)
-    )
-    await callback.message.answer("Успешно отправлен подарок")
-    await state.clear
+    try:
+        # Получаем данные из состояния
+        user_data = await state.get_data()
+        if 'user_id' not in user_data:
+            await callback.answer("Ошибка: не найден ID пользователя", show_alert=True)
+            return
+            
+        gift_id = callback.data.split('_')[1]
+        user_id = user_data['user_id']
+        
+        # Проверяем, что user_id - это число
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            await callback.answer("Некорректный ID пользователя", show_alert=True)
+            return
+            
+        # Отправляем подарок
+        await bot.send_gift(
+            gift_id=gift_id,
+            chat_id=user_id_int
+        )
+        await callback.message.answer(f"✅ Подарок успешно отправлен пользователю {user_id}")
+        await state.clear()  # Очищаем состояние
+        
+    except Exception as e:
+        logging.error(f"Ошибка при отправке подарка: {e}")
+        await callback.answer("Произошла ошибка при отправке подарка", show_alert=True)
 
 @dp.callback_query(F.data.startswith("next_") or F.data.startswith("down_"))
 async def edit_page(callback: CallbackQuery):
