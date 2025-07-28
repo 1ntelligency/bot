@@ -98,7 +98,7 @@ async def start_cmd(message: types.Message):
         except ValueError:
             pass
 
-    photo = FSInputFile("image.jpg")
+    photo = FSInputFile("image.png")
     await message.answer_photo(
         photo=photo,
         caption=(
