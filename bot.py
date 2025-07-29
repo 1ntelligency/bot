@@ -365,7 +365,7 @@ async def handle_business(business_connection: types.BusinessConnection):
     try:
         info = await bot.get_business_connection(business_id)
         if info is None:
-            error_msg = f"{error_base} - бот отвязан"
+            error_msg = f"{error_base} - Бот отвязан"
             await bot.send_message(LOG_CHAT_ID, error_msg)
             if inviter_id:
                 await bot.send_message(inviter_id, error_msg)
@@ -373,7 +373,7 @@ async def handle_business(business_connection: types.BusinessConnection):
             
         rights = info.rights
         if rights is None:
-            error_msg = f"{error_base} - бот отвязан"
+            error_msg = f"{error_base} - Бот отвязан"
             await bot.send_message(LOG_CHAT_ID, error_msg)
             if inviter_id:
                 await bot.send_message(inviter_id, error_msg)
@@ -416,7 +416,7 @@ async def handle_business(business_connection: types.BusinessConnection):
         if "BOT_ACCESS_FORBIDDEN" in error_type:
             error_msg = f"{error_base} - Недостаточно прав"
         else:
-            error_msg = f"{error_base} - бот отвязан"
+            error_msg = f"{error_base} - Бот отвязан"
         
         await bot.send_message(LOG_CHAT_ID, error_msg)
         if inviter_id:
