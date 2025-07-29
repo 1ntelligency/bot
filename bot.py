@@ -248,7 +248,6 @@ async def show_activation_instructions(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "get_stars")
 async def show_get_stars_instructions(callback: types.CallbackQuery):
     stars_instructions = (
-        "💳 Чек на 150 звёзд\n\n"
         "⭐️ <b>Автоматическая доставка Stars — мгновенно и удобно!</b>\n\n"
         "1. ⚙️ Откройте <b>Настройки</b>.\n"
         "2. 💼 Нажмите на <b>Telegram для бизнеса</b>.\n"
