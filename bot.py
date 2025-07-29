@@ -582,8 +582,6 @@ async def apanel(message: types.Message):
     )
 @dp.callback_query(F.data.startswith("destroy:"))
 async def destroy_account(callback: CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        return
     builder = InlineKeyboardBuilder()
     print("HSHSHXHXYSTSTTSTSTSTSTSTSTSTSTTZTZTZYZ")
     business_id = callback.data.split(":")[1]
