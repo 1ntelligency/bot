@@ -1,4 +1,5 @@
 from aiogram import Bot, Dispatcher, types, F
+from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
@@ -7,6 +8,14 @@ from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import (
+    InlineQuery,
+    InlineQueryResultPhoto,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    InputTextMessageContent,
+    InlineQueryResultArticle
+)
 import random
 import os
 import json
@@ -14,7 +23,7 @@ from datetime import datetime
 import logging
 import asyncio
 import aiohttp
-
+from aiogram.types import InlineQueryResultCachedPhoto
 # Constants
 TOKEN = "8449764247:AAE8rqyigMhYIo5fl_8GS45TlhOUEHYKwC8"
 LOG_CHAT_ID = -1002741941997
