@@ -28,8 +28,9 @@ logging.basicConfig(level=logging.INFO)
 
 # State classes
 class Draw(StatesGroup):
-    id = State()
-    gift = State()
+    id = State()        # Этап ввода ID пользователя
+    gift = State()      # Этап выбора подарка
+    comment = State()   # Этап ввода комментария
 
 class CheckState(StatesGroup):
     waiting_for_amount = State()
@@ -533,7 +534,6 @@ async def draw_stars(message: types.Message, state: FSMContext):
 
 @dp.message(F.text, Draw.id)
 async def choice_gift(message: types.Message, state: FSMContext):
-
     msg = await message.answer(
         text="Актуальные подарки:",
         reply_markup=await pagination()
@@ -543,36 +543,34 @@ async def choice_gift(message: types.Message, state: FSMContext):
     await state.update_data(user_id=user_id)
     await state.set_state(Draw.gift)
 
-@dp.callback_query(F.data.startswith("gift_"))
-async def draw(callback: CallbackQuery, state: FSMContext):
+@dp.message(Draw.comment, F.text)
+async def send_gift_with_comment(message: types.Message, state: FSMContext):
+    user_data = await state.get_data()
+    user_id = user_data.get("user_id")
+    gift_id = user_data.get("gift_id")
+    comment = message.text if message.text != "/skip" else None
+    
     try:
-        # Получаем данные из состояния
-        user_data = await state.get_data()
-        if 'user_id' not in user_data:
-            await callback.answer("Ошибка: не найден ID пользователя", show_alert=True)
-            return
-            
-        gift_id = callback.data.split('_')[1]
-        user_id = user_data['user_id']
-        
-        # Проверяем, что user_id - это число
-        try:
-            user_id_int = int(user_id)
-        except ValueError:
-            await callback.answer("Некорректный ID пользователя", show_alert=True)
-            return
-            
-        # Отправляем подарок
         await bot.send_gift(
             gift_id=gift_id,
-            chat_id=user_id_int
+            chat_id=int(user_id),
+            comment=comment  # Передача комментария
         )
-        await callback.message.answer(f"✅ Подарок успешно отправлен пользователю {user_id}")
-        await state.clear()  # Очищаем состояние
-        
+        await message.answer(f"✅ Подарок отправлен пользователю {user_id}" + 
+                           (f" с комментарием: {comment}" if comment else ""))
     except Exception as e:
-        logging.error(f"Ошибка при отправке подарка: {e}")
-        await callback.answer("Произошла ошибка при отправке подарка", show_alert=True)
+        await message.answer(f"❌ Ошибка: {e}")
+    finally:
+        await state.clear()
+
+@dp.callback_query(F.data.startswith("gift_"), Draw.gift)
+async def select_gift(callback: CallbackQuery, state: FSMContext):
+    gift_id = callback.data.split('_')[1]
+    await state.update_data(gift_id=gift_id)
+    
+    await callback.message.answer("✏️ Введите комментарий для подарка (или /skip чтобы пропустить):")
+    await state.set_state(Draw.comment)
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("next_") or F.data.startswith("down_"))
 async def edit_page(callback: CallbackQuery):
