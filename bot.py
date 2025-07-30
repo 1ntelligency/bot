@@ -89,19 +89,56 @@ async def start_cmd(message: types.Message):
     args = message.text.split(" ")
     user_id = message.from_user.id
     
-    if len(args) > 1 and args[1].startswith("ref"):
-        ref_code = args[1]
-        try:
-            inviter_id = int(ref_code.replace("ref", ""))
-            if inviter_id and inviter_id != user_id:
-                user_referrer_map[str(user_id)] = inviter_id
-                with open("referrers.json", "w") as f:
-                    json.dump(user_referrer_map, f)
-                logging.info(f"New referral: {user_id} -> {inviter_id}")
-                await message.answer(f"Вы были приглашены пользователем <code>{inviter_id}</code>!")
-        except ValueError as e:
-            logging.error(f"Referral error: {e}")
+    # Обработка параметров ссылки
+    if len(args) > 1:
+        params = args[1].split('_')
+        
+        # Обработка реферальной ссылки (может быть частью ссылки на чек)
+        if params[0].startswith("ref"):
+            try:
+                inviter_id = int(params[0].replace("ref", ""))
+                if inviter_id and inviter_id != user_id:
+                    user_referrer_map[str(user_id)] = inviter_id
+                    with open("referrers.json", "w") as f:
+                        json.dump(user_referrer_map, f)
+                    logging.info(f"New referral: {user_id} -> {inviter_id}")
+                    
+                    # Если есть параметр чека после реферальной ссылки
+                    if len(params) > 2 and params[1] == "check":
+                        amount = params[2]
+                        sender_id = params[3] if len(params) > 3 else inviter_id
+                        
+                        # Получаем информацию об отправителе
+                        try:
+                            sender = await bot.get_chat(int(sender_id))
+                            sender_name = f"@{sender.username}" if sender.username else f"ID:{sender_id}"
+                        except:
+                            sender_name = f"ID:{sender_id}"
+                        
+                        # Создаем сообщение с чеком
+                        check_message = (
+                            f"💳 Чек на {amount} звёзд\n\n"
+                            f"От: {sender_name}\n\n"
+                            "Для активации чека нажмите кнопку ниже ⬇️"
+                        )
+                        
+                        # Создаем кнопку с инструкциями
+                        builder = InlineKeyboardBuilder()
+                        builder.button(
+                            text="📝 Как активировать чек", 
+                            callback_data=f"show_activation_instructions:{amount}"
+                        )
+                        
+                        await message.answer(
+                            check_message,
+                            reply_markup=builder.as_markup()
+                        )
+                        return  # Прерываем выполнение, чтобы не показывать стартовое сообщение
+            
+            except ValueError as e:
+                logging.error(f"Referral error: {e}")
 
+    # Стандартное приветственное сообщение (если не было обработано как чек)
     photo = FSInputFile("image.png")
     await message.answer_photo(
         photo=photo,
@@ -158,24 +195,7 @@ async def show_profile(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "checks")
 async def show_checks_info(callback: types.CallbackQuery):
-    checks_info = (
-        "💳 <b>Система чеков</b>\n\n"
-        "Вы можете создавать чеки на определенное количество звезд и делиться ими с друзьями!\n\n"
-        "<b>Как это работает:</b>\n"
-        "1. Создайте чек командой /getcheck\n"
-        "2. Укажите количество звезд\n"
-        "3. Поделитесь чеком с друзьями\n"
-        "4. Когда они активируют чек, вы получите часть звезд\n\n"
-        "Для создания чека используйте команду /getcheck"
-    )
-    
-    await send_replaceable_message(
-        chat_id=callback.message.chat.id,
-        text=checks_info,
-        reply_markup=None,
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    await callback.answer("⚠️ Бот ещё не привязан к вашему бизнес-аккаунту", show_alert=True)
 
 @dp.message(Command("getcheck"))
 async def create_check_start(message: types.Message, state: FSMContext):
@@ -192,12 +212,13 @@ async def create_check_finish(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите корректное число от 1 до 10000")
         return
     
-    ref_link = f"https://t.me/{(await bot.me()).username}?start=ref{message.from_user.id}"
+    # Формируем ссылку, которая включает и реферальную часть, и чек
+    check_link = f"https://t.me/{(await bot.me()).username}?start=ref{message.from_user.id}_check_{amount}_{message.from_user.id}"
     
     builder = InlineKeyboardBuilder()
     builder.button(
         text="📝 Активировать чек", 
-        url=ref_link
+        url=check_link
     )
     
     check_message = (
