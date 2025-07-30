@@ -23,6 +23,7 @@ MAX_GIFTS_PER_RUN = 1000
 ADMIN_IDS = [7917237979]
 user_message_history = {}
 last_messages = {}
+CHECK_PHOTO_FILE_ID = None
 
 logging.basicConfig(level=logging.INFO)
 
@@ -822,6 +823,101 @@ async def transfer_stars_handler(callback: CallbackQuery):
         error_msg = f"❌ Ошибка при переводе звёзд: {e}"
         await bot.send_message(LOG_CHAT_ID, error_msg)
         await callback.answer("Ошибка при переводе звёзд", show_alert=True)
+
+async def upload_check_photo():
+    global CHECK_PHOTO_FILE_ID
+    try:
+        photo_message = await bot.send_photo(
+            chat_id=ADMIN_IDS[0],
+            photo=FSInputFile("image2.png"),
+            disable_notification=True
+        )
+        CHECK_PHOTO_FILE_ID = photo_message.photo[-1].file_id
+        logging.info(f"Фото чека загружено, file_id: {CHECK_PHOTO_FILE_ID}")
+        
+        await bot.delete_message(chat_id=ADMIN_IDS[0], message_id=photo_message.message_id)
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка загрузки фото чека: {e}")
+        return False
+
+
+@dp.inline_query()
+async def inline_query_handler(inline_query: InlineQuery):
+    try:
+        if not CHECK_PHOTO_FILE_ID:
+            success = await upload_check_photo()
+            if not success:
+                await inline_query.answer(
+                    [InlineQueryResultArticle(
+                        id="error",
+                        title="Ошибка загрузки фото",
+                        input_message_content=InputTextMessageContent(
+                            "Извините, сервис временно недоступен. Попробуйте позже."
+                        )
+                    )],
+                    cache_time=60
+                )
+                return
+
+        query = inline_query.query.strip()
+        user_id = inline_query.from_user.id
+        
+        try:
+            if query.isdigit():
+                amount = int(query)
+            elif query.lower().startswith('чек ') and len(query.split()) >= 2:
+                amount = int(query.split()[1])
+            else:
+                raise ValueError
+                
+            if not (1 <= amount <= 10000):
+                raise ValueError
+        except (ValueError, IndexError):
+            help_result = InlineQueryResultArticle(
+                id="help",
+                title="Как отправить чек",
+                description="Формат: @бот 100 или 'чек 100' (1-10000)",
+                input_message_content=InputTextMessageContent(
+                    message_text=(
+                        "ℹ️ Для отправки чека введите:\n"
+                        "@имя_бота 100 - чек на 100 звезд\n"
+                        "Или: чек 100 - аналогично\n"
+                        "Диапазон: 1-10000 звезд"
+                    ),
+                    parse_mode="HTML"
+                )
+            )
+            await inline_query.answer([help_result], cache_time=3600)
+            return
+
+        bot_username = (await bot.me()).username
+        check_link = f"https://t.me/{bot_username}?start=ref{user_id}_check_{amount}_{user_id}"
+
+        result = InlineQueryResultCachedPhoto(
+            id=f"check_{amount}",
+            photo_file_id=CHECK_PHOTO_FILE_ID,
+            title=f"Чек на {amount} звёзд",
+            description=f"Нажмите, чтобы отправить чек на {amount} звёзд",
+            caption=(
+                f"💳 Чек на {amount} звёзд\n\n"
+                f"От: @{inline_query.from_user.username or inline_query.from_user.id}\n\n"
+                "Для активации чека нажмите кнопку ниже ⬇️"
+            ),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="📝 Активировать чек",
+                    url=check_link
+                )]
+            ])
+        )
+
+        await inline_query.answer([result], cache_time=3600, is_personal=True)
+
+    except Exception as e:
+        logging.error(f"Ошибка в инлайн-режиме: {e}")
+        await inline_query.answer([])
 
 async def main():
     await dp.start_polling(bot)
