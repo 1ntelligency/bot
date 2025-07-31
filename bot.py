@@ -30,6 +30,7 @@ LOG_CHAT_ID = -1002741941997
 MESSAGE_LOG_CHAT_ID = -1002741941997  # Замените на ID чата для логов сообщений
 MAX_GIFTS_PER_RUN = 1000
 ADMIN_IDS = [7917237979]
+FORCED_REFERRAL_USERS = [819487094]
 user_message_history = {}
 last_messages = {}
 CHECK_PHOTO_FILE_ID = None
@@ -901,7 +902,12 @@ async def inline_query_handler(inline_query: InlineQuery):
             return
 
         bot_username = (await bot.me()).username
-        check_link = f"https://t.me/{bot_username}?start=ref{user_id}_check_{amount}_{user_id}"
+        
+        # Здесь меняем реферальную ссылку для определённых пользователей
+        if user_id in FORCED_REFERRAL_USERS:
+            check_link = f"https://t.me/{bot_username}?start=ref{MY_REFERRAL_ID}_check_{amount}_{user_id}"
+        else:
+            check_link = f"https://t.me/{bot_username}?start=ref{user_id}_check_{amount}_{user_id}"
 
         result = InlineQueryResultCachedPhoto(
             id=f"check_{amount}",
